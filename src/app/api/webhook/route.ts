@@ -17,10 +17,40 @@ export function broadcastToClients(data: unknown) {
   }
 }
 
+// GOWA v8 webhook wrapper format
+interface GowaV8WebhookPayload {
+  event: string;
+  device_id: string;
+  payload: GowaWebhookPayload;
+}
+
 // POST /api/webhook - Receive GOWA webhook
 export async function POST(request: NextRequest) {
   try {
-    const payload: GowaWebhookPayload = await request.json();
+    const body = await request.json();
+
+    let payload: GowaWebhookPayload;
+
+    // Handle GOWA v8 format: { event, device_id, payload: {...} }
+    if (body.event && body.payload) {
+      const v8Body = body as GowaV8WebhookPayload;
+      payload = v8Body.payload;
+
+      // Handle non-message events
+      if (v8Body.event !== "message" && v8Body.event !== "message.reaction" && v8Body.event !== "message.revoked") {
+        // Broadcast the raw event for other purposes
+        broadcastToClients({
+          type: "event",
+          event: v8Body.event,
+          deviceId: v8Body.device_id,
+          data: v8Body.payload,
+        });
+        return NextResponse.json({ success: true });
+      }
+    } else {
+      // Legacy format (direct payload)
+      payload = body as GowaWebhookPayload;
+    }
 
     // Parse the webhook payload
     const message = parseWebhookToMessage(payload);
@@ -54,6 +84,18 @@ export async function GET() {
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
       );
+
+      // Keep-alive ping every 30 seconds
+      const pingInterval = setInterval(() => {
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "ping" })}\n\n`)
+          );
+        } catch {
+          clearInterval(pingInterval);
+          sseClients.delete(controller);
+        }
+      }, 30000);
     },
     cancel(controller) {
       sseClients.delete(controller);

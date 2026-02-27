@@ -37,7 +37,7 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
     useState<PendingAttachment | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { replyingTo, setReplyingTo, addMessage, gowaBaseUrl } =
+  const { replyingTo, setReplyingTo, addMessage, gowaBaseUrl, gowaDeviceId } =
     useWhatsAppStore();
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -83,13 +83,14 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
         formData.append("phone", phone);
 
         const endpointMap: Record<AttachmentType, string> = {
-          image: "/api/send/image",
-          document: "/api/send/document",
-          video: "/api/send/video",
-          audio: "/api/send/audio",
+          image: "/send/image",
+          document: "/send/file",
+          video: "/send/video",
+          audio: "/send/audio",
         };
 
         formData.append("endpoint", endpointMap[pendingAttachment.type]);
+        if (gowaDeviceId) formData.append("deviceId", gowaDeviceId);
         formData.append(pendingAttachment.type, pendingAttachment.file);
 
         if (pendingAttachment.caption) {
@@ -139,7 +140,8 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             gowaBaseUrl,
-            endpoint: "/api/send/message",
+            endpoint: "/send/message",
+            deviceId: gowaDeviceId,
             phone,
             message: text.trim(),
             ...(replyingTo ? { reply_message_id: replyingTo.id } : {}),
@@ -159,7 +161,7 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
       setSending(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, pendingAttachment, sending, phone, replyingTo, gowaBaseUrl]);
+  }, [text, pendingAttachment, sending, phone, replyingTo, gowaBaseUrl, gowaDeviceId]);
 
   const handleFileSelect = (type: AttachmentType) => {
     setShowAttachMenu(false);

@@ -13,6 +13,7 @@ interface WhatsAppStore {
   replyingTo: Message | null;
   selectedImage: { url: string; messageId: string; chatId: string } | null;
   gowaBaseUrl: string;
+  gowaDeviceId: string;
   isConnected: boolean;
 
   // Chat actions
@@ -52,6 +53,7 @@ interface WhatsAppStore {
 
   // Config
   setGowaBaseUrl: (url: string) => void;
+  setGowaDeviceId: (deviceId: string) => void;
   setIsConnected: (connected: boolean) => void;
 
   // Computed
@@ -69,7 +71,8 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
       searchQuery: "",
       replyingTo: null,
       selectedImage: null,
-      gowaBaseUrl: "http://localhost:3000",
+      gowaBaseUrl: "http://localhost:3001",
+      gowaDeviceId: "default",
       isConnected: false,
 
       setChats: (chats) => set({ chats }),
@@ -243,6 +246,8 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
 
       setGowaBaseUrl: (url) => set({ gowaBaseUrl: url }),
 
+      setGowaDeviceId: (deviceId) => set({ gowaDeviceId: deviceId }),
+
       setIsConnected: (connected) => set({ isConnected: connected }),
 
       getFilteredChats: () => {
@@ -271,6 +276,7 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
         chats: state.chats,
         messages: state.messages,
         gowaBaseUrl: state.gowaBaseUrl,
+        gowaDeviceId: state.gowaDeviceId,
       }),
     }
   )

@@ -6,6 +6,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const gowaBaseUrl = formData.get("gowaBaseUrl") as string;
     const endpoint = formData.get("endpoint") as string;
+    const deviceId = formData.get("deviceId") as string | null;
 
     if (!gowaBaseUrl || !endpoint) {
       return NextResponse.json(
@@ -17,11 +18,18 @@ export async function POST(request: NextRequest) {
     // Remove our internal fields
     formData.delete("gowaBaseUrl");
     formData.delete("endpoint");
+    formData.delete("deviceId");
 
     const targetUrl = `${gowaBaseUrl.replace(/\/$/, "")}${endpoint}`;
 
+    const headers: Record<string, string> = {};
+    if (deviceId) {
+      headers["X-Device-Id"] = deviceId;
+    }
+
     const response = await fetch(targetUrl, {
       method: "POST",
+      headers,
       body: formData,
     });
 

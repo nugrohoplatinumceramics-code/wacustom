@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // POST /api/send - Proxy to GOWA API for sending messages
 export async function POST(request: NextRequest) {
   try {
-    const { gowaBaseUrl, endpoint, ...body } = await request.json();
+    const { gowaBaseUrl, endpoint, deviceId, ...body } = await request.json();
 
     if (!gowaBaseUrl) {
       return NextResponse.json(
@@ -21,8 +21,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const headers: Record<string, string> = {};
+    if (deviceId) {
+      headers["X-Device-Id"] = deviceId;
+    }
+
     const response = await fetch(targetUrl, {
       method: "POST",
+      headers,
       body: formData,
     });
 

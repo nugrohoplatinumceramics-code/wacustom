@@ -26,6 +26,9 @@ A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOW
 - [x] Resizable sidebar with draggable divider (280px - 600px range)
 - [x] Download attachments - images, videos, audio files can be downloaded from chat
 - [x] Backup & Restore chat - export/import all chats and messages with media to JSON file
+- [x] Message context menu - hover over any message to see reply, forward, and delete options
+- [x] Delete messages - messages can be deleted locally (marked as deleted)
+- [x] Forward messages - forward any message to other chats with search/filter dialog
 
 ## Current Structure
 
@@ -107,3 +110,4 @@ A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOW
 | 2026-02-27 | Fixed device creation - added deviceId query param for GOWA auth |
 | 2026-02-27 | Fixed confusing status label - changed "Connected" to "Live" to indicate SSE status, not WhatsApp connection |
 | 2026-02-27 | Added resizable sidebar with draggable divider (280px - 600px range), width persists in localStorage |
+| 2026-02-27 | Added message context menu with delete, forward, and reply options; messages can be forwarded to other chats |

@@ -23,6 +23,7 @@ A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOW
 - [x] Image viewer with zoom and annotation/marking feature
 - [x] Settings panel for GOWA configuration
 - [x] Zustand store with localStorage persistence
+- [x] Resizable sidebar with draggable divider (280px - 600px range)
 
 ## Current Structure
 
@@ -99,3 +100,4 @@ A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOW
 | 2026-02-27 | Fixed QR code endpoint - query params now properly forwarded to GOWA |
 | 2026-02-27 | Fixed device creation - added deviceId query param for GOWA auth |
 | 2026-02-27 | Fixed confusing status label - changed "Connected" to "Live" to indicate SSE status, not WhatsApp connection |
+| 2026-02-27 | Added resizable sidebar with draggable divider (280px - 600px range), width persists in localStorage |

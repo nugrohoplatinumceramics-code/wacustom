@@ -43,6 +43,7 @@ interface WhatsAppStore {
     status: Message["status"]
   ) => void;
   deleteMessage: (chatId: string, messageId: string) => void;
+  forwardMessage: (fromChatId: string, messageId: string, toChatId: string) => void;
   addAnnotation: (
     chatId: string,
     messageId: string,
@@ -224,6 +225,55 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
             ),
           },
         })),
+
+      forwardMessage: (fromChatId, messageId, toChatId) =>
+        set((state) => {
+          const originalMessage = state.messages[fromChatId]?.find(
+            (m) => m.id === messageId
+          );
+          if (!originalMessage) return state;
+
+          // Create forwarded message with new ID and timestamp
+          const forwardedMessage: Message = {
+            ...originalMessage,
+            id: `forward-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            chatId: toChatId,
+            timestamp: new Date(),
+            fromMe: true,
+            status: "sent",
+            replyTo: undefined, // Don't carry over reply context
+          };
+
+          const targetMessages = state.messages[toChatId] || [];
+          const updatedMessages = [...targetMessages, forwardedMessage].sort(
+            (a, b) =>
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+
+          // Update target chat's last message
+          const updatedChats = state.chats.map((c) => {
+            if (c.id === toChatId) {
+              return {
+                ...c,
+                lastMessage: forwardedMessage,
+                updatedAt: forwardedMessage.timestamp,
+              };
+            }
+            return c;
+          });
+
+          return {
+            messages: {
+              ...state.messages,
+              [toChatId]: updatedMessages,
+            },
+            chats: updatedChats.sort(
+              (a, b) =>
+                new Date(b.updatedAt).getTime() -
+                new Date(a.updatedAt).getTime()
+            ),
+          };
+        }),
 
       addAnnotation: (chatId, messageId, annotation) =>
         set((state) => ({

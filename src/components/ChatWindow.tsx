@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { format } from "date-fns";
 import {
   Phone,
@@ -14,10 +14,13 @@ import {
   FileText,
   Play,
   Pencil,
+  Trash2,
+  Forward,
+  X,
 } from "lucide-react";
 import { useWhatsAppStore } from "@/lib/store";
 import { MessageInput } from "./MessageInput";
-import type { Message } from "@/types/whatsapp";
+import type { Message, Chat } from "@/types/whatsapp";
 import { formatFileSize } from "@/lib/webhook-parser";
 
 // Helper function to download media
@@ -58,13 +61,159 @@ function ReplyPreview({ replyTo }: { replyTo: NonNullable<Message["replyTo"]> })
   );
 }
 
+interface MessageContextMenuProps {
+  message: Message;
+  onReply: () => void;
+  onForward: () => void;
+  onDelete: () => void;
+  isMe: boolean;
+}
+
+function MessageContextMenu({ message, onReply, onForward, onDelete, isMe }: MessageContextMenuProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  if (message.isDeleted) return null;
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-1.5 rounded-full hover:bg-[#2a3942] transition-colors"
+      >
+        <MoreVertical className="w-4 h-4 text-[#8696a0]" />
+      </button>
+      {isOpen && (
+        <div className={`absolute ${isMe ? "right-0" : "left-0"} top-full mt-1 bg-[#233138] rounded-lg shadow-lg border border-[#2a3942] py-1 min-w-[160px] z-20`}>
+          <button
+            onClick={() => {
+              onReply();
+              setIsOpen(false);
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-[#e9edef] hover:bg-[#2a3942] flex items-center gap-2"
+          >
+            <Reply className="w-4 h-4" />
+            Reply
+          </button>
+          <button
+            onClick={() => {
+              onForward();
+              setIsOpen(false);
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-[#e9edef] hover:bg-[#2a3942] flex items-center gap-2"
+          >
+            <Forward className="w-4 h-4" />
+            Forward
+          </button>
+          <div className="border-t border-[#2a3942] my-1" />
+          <button
+            onClick={() => {
+              onDelete();
+              setIsOpen(false);
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-[#2a3942] flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ForwardDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onForward: (chatId: string) => void;
+  chats: Chat[];
+  currentChatId: string;
+}
+
+function ForwardDialog({ isOpen, onClose, onForward, chats, currentChatId }: ForwardDialogProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  if (!isOpen) return null;
+
+  const filteredChats = chats.filter(
+    (c) =>
+      c.id !== currentChatId &&
+      (c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.phone.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-[#111b21] rounded-lg w-full max-w-md mx-4 shadow-xl border border-[#2a3942]">
+        <div className="flex items-center justify-between p-4 border-b border-[#2a3942]">
+          <h3 className="text-lg font-medium text-[#e9edef]">Forward to</h3>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full hover:bg-[#2a3942] transition-colors"
+          >
+            <X className="w-5 h-5 text-[#8696a0]" />
+          </button>
+        </div>
+        <div className="p-4">
+          <input
+            type="text"
+            placeholder="Search contacts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#2a3942] text-[#e9edef] px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]"
+          />
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {filteredChats.length === 0 ? (
+            <div className="p-4 text-center text-[#8696a0]">
+              {searchQuery ? "No contacts found" : "No other chats available"}
+            </div>
+          ) : (
+            filteredChats.map((chat) => (
+              <button
+                key={chat.id}
+                onClick={() => onForward(chat.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#202c33] transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-[#00a884] flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-semibold text-sm">
+                    {chat.name.slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#e9edef] truncate">
+                    {chat.name}
+                  </p>
+                  <p className="text-xs text-[#8696a0] truncate">{chat.phone}</p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface MessageBubbleProps {
   message: Message;
   onReply: (message: Message) => void;
+  onForward: (message: Message) => void;
+  onDelete: (message: Message) => void;
   onImageClick: (url: string, messageId: string, chatId: string) => void;
 }
 
-function MessageBubble({ message, onReply, onImageClick }: MessageBubbleProps) {
+function MessageBubble({ message, onReply, onForward, onDelete, onImageClick }: MessageBubbleProps) {
   const isMe = message.fromMe;
   const time = format(new Date(message.timestamp), "HH:mm");
 
@@ -302,14 +451,22 @@ function MessageBubble({ message, onReply, onImageClick }: MessageBubbleProps) {
       <div className="relative max-w-[65%]">
         {/* Action buttons on hover */}
         <div
-          className={`absolute top-1 ${isMe ? "-left-16" : "-right-16"} opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10`}
+          className={`absolute top-1 ${isMe ? "-left-20" : "-right-20"} opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 z-10`}
         >
           <button
             onClick={() => onReply(message)}
             className="p-1.5 rounded-full bg-[#202c33] hover:bg-[#2a3942] shadow"
+            title="Reply"
           >
             <Reply className="w-3.5 h-3.5 text-[#8696a0]" />
           </button>
+          <MessageContextMenu
+            message={message}
+            onReply={() => onReply(message)}
+            onForward={() => onForward(message)}
+            onDelete={() => onDelete(message)}
+            isMe={isMe}
+          />
         </div>
 
         <div className={`px-3 py-2 ${bubbleClass}`}>
@@ -368,11 +525,36 @@ export function ChatWindow() {
     getMessages,
     setReplyingTo,
     setSelectedImage,
+    deleteMessage,
+    forwardMessage,
+    chats,
   } = useWhatsAppStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chat = getActiveChat();
   const messages = activeChatId ? getMessages(activeChatId) : [];
+  
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+
+  const handleForward = (message: Message) => {
+    setForwardingMessage(message);
+    setForwardDialogOpen(true);
+  };
+
+  const handleForwardToChat = (targetChatId: string) => {
+    if (forwardingMessage && activeChatId) {
+      forwardMessage(activeChatId, forwardingMessage.id, targetChatId);
+    }
+    setForwardDialogOpen(false);
+    setForwardingMessage(null);
+  };
+
+  const handleDelete = (message: Message) => {
+    if (activeChatId && confirm("Are you sure you want to delete this message?")) {
+      deleteMessage(activeChatId, message.id);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -461,6 +643,8 @@ export function ChatWindow() {
                     key={msg.id}
                     message={msg}
                     onReply={setReplyingTo}
+                    onForward={handleForward}
+                    onDelete={handleDelete}
                     onImageClick={(url, messageId, chatId) =>
                       setSelectedImage({ url, messageId, chatId })
                     }
@@ -475,6 +659,18 @@ export function ChatWindow() {
 
       {/* Message input */}
       <MessageInput chatId={chat.id} phone={chat.phone} />
+
+      {/* Forward Dialog */}
+      <ForwardDialog
+        isOpen={forwardDialogOpen}
+        onClose={() => {
+          setForwardDialogOpen(false);
+          setForwardingMessage(null);
+        }}
+        onForward={handleForwardToChat}
+        chats={chats}
+        currentChatId={activeChatId}
+      />
     </div>
   );
 }

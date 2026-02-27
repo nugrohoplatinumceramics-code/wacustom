@@ -222,7 +222,7 @@ export function ChatList() {
               <WifiOff className="w-4 h-4 text-[#8696a0]" />
             )}
             <span className="text-xs text-[#8696a0]">
-              {isConnected ? "Connected" : "Connecting..."}
+              {isConnected ? "Live" : "Reconnecting..."}
             </span>
           </div>
         </div>

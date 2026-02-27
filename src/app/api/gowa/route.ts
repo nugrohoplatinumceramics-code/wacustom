@@ -18,7 +18,12 @@ async function proxyRequest(request: NextRequest, method: string) {
       );
     }
 
-    const targetUrl = `${gowaBaseUrl.replace(/\/$/, "")}${path}`;
+    // Build target URL with query params
+    const targetUrlObj = new URL(path, gowaBaseUrl.replace(/\/$/, ""));
+    if (deviceId) {
+      targetUrlObj.searchParams.set("device_id", deviceId);
+    }
+    const targetUrl = targetUrlObj.toString();
 
     const headers: Record<string, string> = {};
     if (deviceId) {

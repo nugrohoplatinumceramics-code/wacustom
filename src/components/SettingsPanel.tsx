@@ -114,7 +114,7 @@ export function SettingsPanel() {
     setQrError(null);
     setQrData(null);
     try {
-      const res = await fetch(proxyUrl(`/app/login?device_id=${deviceIdInput}`));
+      const res = await fetch(proxyUrl(`/app/login`, deviceIdInput));
       const data = await res.json();
       if (data.results?.qr_link) {
         setQrData(data.results);

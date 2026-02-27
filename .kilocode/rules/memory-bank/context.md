@@ -97,3 +97,4 @@ A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOW
 | 2026-02-27 | Full WhatsApp Web clone built with GOWA integration |
 | 2026-02-27 | GOWA v8 support: device management, QR code login, fixed API endpoints |
 | 2026-02-27 | Fixed QR code endpoint - query params now properly forwarded to GOWA |
+| 2026-02-27 | Fixed device creation - added deviceId query param for GOWA auth |

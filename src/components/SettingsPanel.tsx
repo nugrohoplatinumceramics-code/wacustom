@@ -135,7 +135,7 @@ export function SettingsPanel() {
     setCreatingDevice(true);
     try {
       const res = await fetch(
-        `/api/gowa?gowaBaseUrl=${encodeURIComponent(urlInput.trim())}&path=/devices`,
+        `/api/gowa?gowaBaseUrl=${encodeURIComponent(urlInput.trim())}&path=/devices&deviceId=${encodeURIComponent(newDeviceId.trim())}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

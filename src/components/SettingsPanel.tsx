@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Settings, X, Save, ExternalLink, RefreshCw, LogOut, Smartphone, QrCode, CheckCircle, AlertCircle } from "lucide-react";
-import { useWhatsAppStore } from "@/lib/store";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Settings, X, Save, ExternalLink, RefreshCw, LogOut, Smartphone, QrCode, CheckCircle, AlertCircle, Download, Upload, Trash2 } from "lucide-react";
+import { useWhatsAppStore, type BackupData } from "@/lib/store";
 
 interface GowaDevice {
   id: string;
@@ -20,7 +20,15 @@ interface QrLoginResult {
 
 export function SettingsPanel() {
   const [isOpen, setIsOpen] = useState(false);
-  const { gowaBaseUrl, setGowaBaseUrl, gowaDeviceId, setGowaDeviceId } = useWhatsAppStore();
+  const {
+    gowaBaseUrl,
+    setGowaBaseUrl,
+    gowaDeviceId,
+    setGowaDeviceId,
+    exportBackup,
+    importBackup,
+    clearAllData,
+  } = useWhatsAppStore();
   const [urlInput, setUrlInput] = useState(gowaBaseUrl);
   const [deviceIdInput, setDeviceIdInput] = useState(gowaDeviceId);
   const [devices, setDevices] = useState<GowaDevice[]>([]);
@@ -31,6 +39,9 @@ export function SettingsPanel() {
   const [deviceStatus, setDeviceStatus] = useState<string | null>(null);
   const [newDeviceId, setNewDeviceId] = useState("");
   const [creatingDevice, setCreatingDevice] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const webhookUrl =
     typeof window !== "undefined"
@@ -173,6 +184,72 @@ export function SettingsPanel() {
     setGowaBaseUrl(urlInput.trim());
     setGowaDeviceId(deviceIdInput.trim());
     setIsOpen(false);
+  };
+
+  // Backup & Restore functions
+  const handleExportBackup = async () => {
+    setBackupLoading(true);
+    try {
+      const backup = await exportBackup();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `whatsapp-backup-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert("Failed to export backup: " + (error as Error).message);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setRestoreLoading(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const backup: BackupData = JSON.parse(content);
+        
+        // Validate backup structure
+        if (!backup.version || !backup.chats || !backup.messages) {
+          throw new Error("Invalid backup file format");
+        }
+
+        if (confirm(`Restore backup from ${new Date(backup.exportedAt).toLocaleString()}?\n\nThis will replace all current chats and messages. Continue?`)) {
+          importBackup(backup);
+          alert("Backup restored successfully! Please refresh the page.");
+          window.location.reload();
+        }
+      } catch (error) {
+        alert("Failed to restore backup: " + (error as Error).message);
+      } finally {
+        setRestoreLoading(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    };
+    reader.onerror = () => {
+      alert("Failed to read backup file");
+      setRestoreLoading(false);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleClearData = () => {
+    if (confirm("Are you sure you want to delete ALL chats and messages?\n\nThis action cannot be undone!")) {
+      clearAllData();
+      alert("All data cleared. Please refresh the page.");
+      window.location.reload();
+    }
   };
 
   const getStatusColor = (status: string | null) => {
@@ -470,6 +547,58 @@ export function SettingsPanel() {
                   <li>Create a device (e.g. &quot;default&quot;) and click &quot;Get QR Code&quot;</li>
                   <li>Scan QR code with WhatsApp on your phone</li>
                 </ol>
+              </div>
+
+              {/* Backup & Restore */}
+              <div className="border-t border-[#2a3942] pt-5">
+                <h3 className="text-sm font-medium text-[#e9edef] mb-3">
+                  Backup & Restore
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleExportBackup}
+                      disabled={backupLoading}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a3942] text-[#e9edef] text-sm rounded-lg hover:bg-[#3b4a54] disabled:opacity-50 transition-colors"
+                    >
+                      {backupLoading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Export Backup
+                    </button>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={restoreLoading}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a3942] text-[#e9edef] text-sm rounded-lg hover:bg-[#3b4a54] disabled:opacity-50 transition-colors"
+                    >
+                      {restoreLoading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                      Import Backup
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportBackup}
+                      className="hidden"
+                    />
+                  </div>
+                  <button
+                    onClick={handleClearData}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 text-red-400 text-sm rounded-lg hover:bg-red-500/20 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear All Data
+                  </button>
+                  <p className="text-xs text-[#8696a0]">
+                    Backup includes all chats, messages, and media. Restore will replace all current data.
+                  </p>
+                </div>
               </div>
             </div>
 

@@ -4,6 +4,15 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Chat, Message, ImageAnnotation } from "@/types/whatsapp";
 
+// Backup data types
+export interface BackupData {
+  version: string;
+  exportedAt: string;
+  chats: Chat[];
+  messages: Record<string, Message[]>;
+  media: Record<string, string>; // messageId -> base64 data
+}
+
 interface WhatsAppStore {
   // State
   chats: Chat[];
@@ -60,6 +69,11 @@ interface WhatsAppStore {
   getFilteredChats: () => Chat[];
   getActiveChat: () => Chat | undefined;
   getMessages: (chatId: string) => Message[];
+
+  // Backup & Restore
+  exportBackup: () => Promise<BackupData>;
+  importBackup: (data: BackupData) => void;
+  clearAllData: () => void;
 }
 
 export const useWhatsAppStore = create<WhatsAppStore>()(
@@ -268,6 +282,64 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
 
       getMessages: (chatId) => {
         return get().messages[chatId] || [];
+      },
+
+      // Backup & Restore implementation
+      exportBackup: async () => {
+        const state = get();
+        const media: Record<string, string> = {};
+
+        // Collect all media data from messages
+        for (const chatId in state.messages) {
+          for (const msg of state.messages[chatId]) {
+            if (msg.media?.data) {
+              media[msg.id] = msg.media.data;
+            }
+          }
+        }
+
+        return {
+          version: "1.0",
+          exportedAt: new Date().toISOString(),
+          chats: state.chats,
+          messages: state.messages,
+          media,
+        };
+      },
+
+      importBackup: (data) => {
+        // Restore messages with media data
+        const restoredMessages: Record<string, Message[]> = {};
+        
+        for (const chatId in data.messages) {
+          restoredMessages[chatId] = data.messages[chatId].map((msg) => {
+            // Restore media data if available
+            if (data.media[msg.id] && msg.media) {
+              return {
+                ...msg,
+                media: {
+                  ...msg.media,
+                  data: data.media[msg.id],
+                },
+              };
+            }
+            return msg;
+          });
+        }
+
+        set({
+          chats: data.chats,
+          messages: restoredMessages,
+        });
+      },
+
+      clearAllData: () => {
+        set({
+          chats: [],
+          messages: {},
+          activeChatId: null,
+          replyingTo: null,
+        });
       },
     }),
     {

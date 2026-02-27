@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import {
   Phone,
@@ -19,6 +19,26 @@ import { useWhatsAppStore } from "@/lib/store";
 import { MessageInput } from "./MessageInput";
 import type { Message } from "@/types/whatsapp";
 import { formatFileSize } from "@/lib/webhook-parser";
+
+// Helper function to download media
+async function downloadMedia(url: string, filename: string) {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error("Failed to download media:", error);
+    // Fallback: open in new tab
+    window.open(url, "_blank");
+  }
+}
 
 function MessageStatus({ status }: { status: Message["status"] }) {
   if (status === "read") return <span className="text-[#53bdeb] text-xs">✓✓</span>;
@@ -95,6 +115,19 @@ function MessageBubble({ message, onReply, onImageClick }: MessageBubbleProps) {
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const url = message.media?.localUrl || message.media?.url ||
+                        (message.media?.data ? `data:${message.media.mimeType};base64,${message.media.data}` : "");
+                      if (url) {
+                        downloadMedia(url, message.media?.fileName || `image-${message.id}.jpg`);
+                      }
+                    }}
+                    className="bg-black/50 rounded-full p-2 hover:bg-black/70 transition-colors"
+                  >
+                    <Download className="w-4 h-4 text-white" />
+                  </button>
                   <div className="bg-black/50 rounded-full p-2">
                     <Pencil className="w-4 h-4 text-white" />
                   </div>
@@ -115,13 +148,26 @@ function MessageBubble({ message, onReply, onImageClick }: MessageBubbleProps) {
       case "video":
         return (
           <div>
-            <div className="relative bg-black rounded-lg overflow-hidden max-h-64 flex items-center justify-center min-h-32">
-              {message.media?.localUrl ? (
-                <video
-                  src={message.media.localUrl}
-                  className="max-w-full max-h-64"
-                  controls
-                />
+            <div className="relative bg-black rounded-lg overflow-hidden max-h-64 flex items-center justify-center min-h-32 group">
+              {message.media?.localUrl || message.media?.url ? (
+                <>
+                  <video
+                    src={message.media.localUrl || message.media.url}
+                    className="max-w-full max-h-64"
+                    controls
+                  />
+                  <button
+                    onClick={() => {
+                      const url = message.media?.localUrl || message.media?.url;
+                      if (url) {
+                        downloadMedia(url, message.media?.fileName || `video-${message.id}.mp4`);
+                      }
+                    }}
+                    className="absolute top-2 right-2 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Download className="w-4 h-4 text-white" />
+                  </button>
+                </>
               ) : (
                 <div className="flex flex-col items-center gap-2 p-8">
                   <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
@@ -139,14 +185,31 @@ function MessageBubble({ message, onReply, onImageClick }: MessageBubbleProps) {
 
       case "audio":
         return (
-          <div className="flex items-center gap-3 min-w-48">
+          <div className="flex items-center gap-3 min-w-48 group">
             <div className="w-10 h-10 rounded-full bg-[#00a884] flex items-center justify-center flex-shrink-0">
               <Play className="w-5 h-5 text-white ml-0.5" />
             </div>
-            {message.media?.localUrl ? (
-              <audio src={message.media.localUrl} controls className="flex-1 h-8" />
+            {message.media?.localUrl || message.media?.url ? (
+              <audio
+                src={message.media.localUrl || message.media.url}
+                controls
+                className="flex-1 h-8"
+              />
             ) : (
               <div className="flex-1 h-1 bg-[#8696a0] rounded-full" />
+            )}
+            {(message.media?.localUrl || message.media?.url) && (
+              <button
+                onClick={() => {
+                  const url = message.media?.localUrl || message.media?.url;
+                  if (url) {
+                    downloadMedia(url, message.media?.fileName || `audio-${message.id}.ogg`);
+                  }
+                }}
+                className="p-1.5 rounded-full hover:bg-[#2a3942] opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Download className="w-4 h-4 text-[#8696a0]" />
+              </button>
             )}
           </div>
         );

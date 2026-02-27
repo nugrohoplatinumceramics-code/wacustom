@@ -1,10 +1,10 @@
-# Active Context: Next.js Starter Template
+# Active Context: WhatsApp Web Clone (GOWA)
 
 ## Current State
 
-**Template Status**: ✅ Ready for development
+**App Status**: ✅ WhatsApp Web clone fully built and deployed
 
-The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. It's ready for AI-assisted expansion to build any type of application.
+A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOWA (go-whatsapp-web-multidevice)](https://github.com/aldinokemal/go-whatsapp-web-multidevice) via webhook for real-time message reception and API for sending messages.
 
 ## Recently Completed
 
@@ -14,59 +14,65 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] ESLint configuration
 - [x] Memory bank documentation
 - [x] Recipe system for common features
+- [x] WhatsApp Web clone UI with GOWA integration
+- [x] Real-time message reception via SSE from GOWA webhook
+- [x] Chat list sidebar with search, pin, mute, unread count
+- [x] Message bubbles for all message types (text, image, video, audio, document, location, contact, sticker)
+- [x] Reply to messages with preview
+- [x] Send text and media via GOWA API
+- [x] Image viewer with zoom and annotation/marking feature
+- [x] Settings panel for GOWA configuration
+- [x] Zustand store with localStorage persistence
 
 ## Current Structure
 
 | File/Directory | Purpose | Status |
 |----------------|---------|--------|
-| `src/app/page.tsx` | Home page | ✅ Ready |
+| `src/app/page.tsx` | Home page (renders WhatsAppApp) | ✅ Ready |
 | `src/app/layout.tsx` | Root layout | ✅ Ready |
-| `src/app/globals.css` | Global styles | ✅ Ready |
+| `src/app/globals.css` | Global styles + scrollbar | ✅ Ready |
+| `src/app/api/webhook/route.ts` | GOWA webhook receiver + SSE endpoint | ✅ Ready |
+| `src/app/api/send/route.ts` | Proxy for text message sending | ✅ Ready |
+| `src/app/api/send/media/route.ts` | Proxy for media file sending | ✅ Ready |
+| `src/components/WhatsAppApp.tsx` | Root app component | ✅ Ready |
+| `src/components/ChatList.tsx` | Sidebar with chat list | ✅ Ready |
+| `src/components/ChatWindow.tsx` | Main chat area with messages | ✅ Ready |
+| `src/components/MessageInput.tsx` | Message input with attachments | ✅ Ready |
+| `src/components/ImageViewer.tsx` | Full-screen image viewer with annotations | ✅ Ready |
+| `src/components/SettingsPanel.tsx` | GOWA URL configuration | ✅ Ready |
+| `src/lib/store.ts` | Zustand state management | ✅ Ready |
+| `src/lib/gowa-api.ts` | GOWA API client | ✅ Ready |
+| `src/lib/webhook-parser.ts` | Parse GOWA webhook payloads | ✅ Ready |
+| `src/hooks/useSSE.ts` | SSE hook for real-time updates | ✅ Ready |
+| `src/types/whatsapp.ts` | TypeScript types for GOWA/WhatsApp | ✅ Ready |
 | `.kilocode/` | AI context & recipes | ✅ Ready |
 
-## Current Focus
+## Architecture
 
-The template is ready. Next steps depend on user requirements:
+### Data Flow
+1. GOWA receives WhatsApp messages and POSTs to `/api/webhook`
+2. Webhook parses payload and broadcasts via SSE to all connected clients
+3. Client's `useSSE` hook receives events and updates Zustand store
+4. React components re-render with new messages
 
-1. What type of application to build
-2. What features are needed
-3. Design/branding preferences
+### Sending Messages
+1. User types/selects media in `MessageInput`
+2. Optimistic update added to store immediately
+3. Request proxied through `/api/send` or `/api/send/media` to GOWA API
+4. GOWA sends the actual WhatsApp message
 
-## Quick Start Guide
+### Image Annotations
+- Click any image to open `ImageViewer`
+- Toggle "Annotate" mode to draw rectangles on images
+- Choose colors, add labels to annotations
+- Annotations stored in Zustand store per message
 
-### To add a new page:
+## GOWA Setup
 
-Create a file at `src/app/[route]/page.tsx`:
-```tsx
-export default function NewPage() {
-  return <div>New page content</div>;
-}
-```
-
-### To add components:
-
-Create `src/components/` directory and add components:
-```tsx
-// src/components/ui/Button.tsx
-export function Button({ children }: { children: React.ReactNode }) {
-  return <button className="px-4 py-2 bg-blue-600 text-white rounded">{children}</button>;
-}
-```
-
-### To add a database:
-
-Follow `.kilocode/recipes/add-database.md`
-
-### To add API routes:
-
-Create `src/app/api/[route]/route.ts`:
-```tsx
-import { NextResponse } from "next/server";
-
-export async function GET() {
-  return NextResponse.json({ message: "Hello" });
-}
-```
+1. Run GOWA: `docker run -p 3000:3000 aldinokemal2104/go-whatsapp-web-multidevice`
+2. Open Settings in the app, set GOWA URL to `http://localhost:3000`
+3. Configure GOWA webhook to POST to `{app-url}/api/webhook`
+4. Scan QR code in GOWA to connect WhatsApp
 
 ## Available Recipes
 
@@ -76,12 +82,16 @@ export async function GET() {
 
 ## Pending Improvements
 
-- [ ] Add more recipes (auth, email, etc.)
-- [ ] Add example components
-- [ ] Add testing setup recipe
+- [ ] Persistent message storage with database (use add-database recipe)
+- [ ] Group chat support improvements
+- [ ] Message search within chat
+- [ ] Contact list management
+- [ ] QR code display for GOWA connection
+- [ ] Audio recording for voice messages
 
 ## Session History
 
 | Date | Changes |
 |------|---------|
 | Initial | Template created with base setup |
+| 2026-02-27 | Full WhatsApp Web clone built with GOWA integration |

@@ -23,7 +23,8 @@ interface WhatsAppStore {
   selectedImage: { url: string; messageId: string; chatId: string } | null;
   gowaBaseUrl: string;
   gowaDeviceId: string;
-  isConnected: boolean;
+  isConnected: boolean; // SSE browser → server connection
+  isWhatsAppConnected: boolean; // GOWA device → WhatsApp connection
 
   // Chat actions
   setChats: (chats: Chat[]) => void;
@@ -54,6 +55,7 @@ interface WhatsAppStore {
     messageId: string,
     annotationId: string
   ) => void;
+  clearAnnotations: (chatId: string, messageId: string) => void;
 
   // UI actions
   setReplyingTo: (message: Message | null) => void;
@@ -65,6 +67,7 @@ interface WhatsAppStore {
   setGowaBaseUrl: (url: string) => void;
   setGowaDeviceId: (deviceId: string) => void;
   setIsConnected: (connected: boolean) => void;
+  setIsWhatsAppConnected: (connected: boolean) => void;
 
   // Computed
   getFilteredChats: () => Chat[];
@@ -89,6 +92,7 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
       gowaBaseUrl: "http://localhost:3001",
       gowaDeviceId: "default",
       isConnected: false,
+      isWhatsAppConnected: false,
 
       setChats: (chats) => set({ chats }),
 
@@ -97,7 +101,17 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
           const existing = state.chats.findIndex((c) => c.id === chat.id);
           if (existing >= 0) {
             const updated = [...state.chats];
-            updated[existing] = chat;
+            const prev = updated[existing];
+            // Keep unread counter from state updates done by addMessage(),
+            // and only use incoming unread count when there was no unread before.
+            updated[existing] = {
+              ...prev,
+              ...chat,
+              unreadCount:
+                prev.unreadCount > 0
+                  ? prev.unreadCount
+                  : chat.unreadCount,
+            };
             return {
               chats: updated.sort(
                 (a, b) =>
@@ -155,6 +169,33 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
           const chatMessages = state.messages[message.chatId] || [];
           const exists = chatMessages.some((m) => m.id === message.id);
           if (exists) return state;
+
+          // Some gateways emit an extra text message like "Image" right after media send.
+          // Ignore that placeholder when we already have a recent outgoing media message.
+          const normalizedText = (message.text || "")
+            .normalize("NFKC")
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          const isPlaceholderText =
+            message.fromMe &&
+            message.type === "text" &&
+            /^(image|video|audio|document|file|sticker)$/.test(normalizedText);
+          if (isPlaceholderText) {
+            const hasRecentOutgoingMedia = [...chatMessages]
+              .reverse()
+              .some((m) => {
+                if (!m.fromMe || m.type === "text" || m.isDeleted) return false;
+                const delta =
+                  Math.abs(
+                    new Date(message.timestamp).getTime() -
+                    new Date(m.timestamp).getTime()
+                  );
+                return delta <= 120000;
+              });
+            if (hasRecentOutgoingMedia) return state;
+          }
 
           const updatedMessages = [...chatMessages, message].sort(
             (a, b) =>
@@ -294,12 +335,22 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
             [chatId]: (state.messages[chatId] || []).map((m) =>
               m.id === messageId
                 ? {
-                    ...m,
-                    annotations: (m.annotations || []).filter(
-                      (a) => a.id !== annotationId
-                    ),
-                  }
+                  ...m,
+                  annotations: (m.annotations || []).filter(
+                    (a) => a.id !== annotationId
+                  ),
+                }
                 : m
+            ),
+          },
+        })),
+
+      clearAnnotations: (chatId, messageId) =>
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [chatId]: (state.messages[chatId] || []).map((m) =>
+              m.id === messageId ? { ...m, annotations: [] } : m
             ),
           },
         })),
@@ -313,6 +364,8 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
       setGowaDeviceId: (deviceId) => set({ gowaDeviceId: deviceId }),
 
       setIsConnected: (connected) => set({ isConnected: connected }),
+
+      setIsWhatsAppConnected: (connected) => set({ isWhatsAppConnected: connected }),
 
       getFilteredChats: () => {
         const { chats, searchQuery } = get();
@@ -360,7 +413,7 @@ export const useWhatsAppStore = create<WhatsAppStore>()(
       importBackup: (data) => {
         // Restore messages with media data
         const restoredMessages: Record<string, Message[]> = {};
-        
+
         for (const chatId in data.messages) {
           restoredMessages[chatId] = data.messages[chatId].map((msg) => {
             // Restore media data if available

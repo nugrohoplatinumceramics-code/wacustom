@@ -3,8 +3,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { format } from "date-fns";
 import {
-  Phone,
-  Video,
   Search,
   MoreVertical,
   Reply,
@@ -22,6 +20,10 @@ import { useWhatsAppStore } from "@/lib/store";
 import { MessageInput } from "./MessageInput";
 import type { Message, Chat } from "@/types/whatsapp";
 import { formatFileSize } from "@/lib/webhook-parser";
+
+function formatDisplayPhone(phone: string): string {
+  return phone.replace(/@s\.whatsapp\.net$/i, "");
+}
 
 // Helper function to download media
 async function downloadMedia(url: string, filename: string) {
@@ -216,6 +218,12 @@ interface MessageBubbleProps {
 function MessageBubble({ message, onReply, onForward, onDelete, onImageClick }: MessageBubbleProps) {
   const isMe = message.fromMe;
   const time = format(new Date(message.timestamp), "HH:mm");
+  const imageUrl =
+    message.media?.localUrl ||
+    message.media?.url ||
+    (message.media?.data
+      ? `data:${message.media.mimeType || "image/jpeg"};base64,${message.media.data}`
+      : "");
 
   const bubbleClass = isMe
     ? "bg-[#005c4b] text-[#e9edef] rounded-tl-2xl rounded-bl-2xl rounded-tr-sm rounded-br-2xl ml-auto"
@@ -244,21 +252,12 @@ function MessageBubble({ message, onReply, onForward, onDelete, onImageClick }: 
             <div
               className="relative cursor-pointer group"
               onClick={() => {
-                const url = message.media?.localUrl || message.media?.url || message.media?.data
-                  ? `data:${message.media.mimeType};base64,${message.media.data}`
-                  : "";
-                if (url) onImageClick(url, message.id, message.chatId);
+                if (imageUrl) onImageClick(imageUrl, message.id, message.chatId);
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={
-                  message.media?.localUrl ||
-                  message.media?.url ||
-                  (message.media?.data
-                    ? `data:${message.media.mimeType};base64,${message.media.data}`
-                    : "")
-                }
+                src={imageUrl}
                 alt={message.media?.caption || "Image"}
                 className="max-w-full rounded-lg max-h-64 object-cover"
               />
@@ -267,10 +266,8 @@ function MessageBubble({ message, onReply, onForward, onDelete, onImageClick }: 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const url = message.media?.localUrl || message.media?.url ||
-                        (message.media?.data ? `data:${message.media.mimeType};base64,${message.media.data}` : "");
-                      if (url) {
-                        downloadMedia(url, message.media?.fileName || `image-${message.id}.jpg`);
+                      if (imageUrl) {
+                        downloadMedia(imageUrl, message.media?.fileName || `image-${message.id}.jpg`);
                       }
                     }}
                     className="bg-black/50 rounded-full p-2 hover:bg-black/70 transition-colors"
@@ -528,11 +525,13 @@ export function ChatWindow() {
     deleteMessage,
     forwardMessage,
     chats,
+    isWhatsAppConnected,
   } = useWhatsAppStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chat = getActiveChat();
   const messages = activeChatId ? getMessages(activeChatId) : [];
+  const [searchInChat, setSearchInChat] = useState("");
   
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
@@ -578,11 +577,20 @@ export function ChatWindow() {
     );
   }
 
+  const visibleMessages = !searchInChat.trim()
+    ? messages
+    : messages.filter((msg) => {
+        const q = searchInChat.toLowerCase();
+        const text = (msg.text || "").toLowerCase();
+        const caption = (msg.media?.caption || "").toLowerCase();
+        return text.includes(q) || caption.includes(q);
+      });
+
   // Group messages by date
   const groupedMessages: { date: Date; messages: Message[] }[] = [];
   let currentDate: string | null = null;
 
-  for (const msg of messages) {
+  for (const msg of visibleMessages) {
     const msgDate = new Date(msg.timestamp);
     const dateStr = msgDate.toDateString();
     if (dateStr !== currentDate) {
@@ -604,21 +612,21 @@ export function ChatWindow() {
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-medium text-[#e9edef] text-sm truncate">{chat.name}</h3>
-          <p className="text-xs text-[#8696a0] truncate">{chat.phone}</p>
+          <p className="text-xs text-[#8696a0] truncate">
+            {formatDisplayPhone(chat.phone)} {isWhatsAppConnected ? "• online" : "• offline"}
+          </p>
         </div>
-        <div className="flex items-center gap-1">
-          <button className="p-2 rounded-full hover:bg-[#2a3942] transition-colors">
-            <Video className="w-5 h-5 text-[#aebac1]" />
-          </button>
-          <button className="p-2 rounded-full hover:bg-[#2a3942] transition-colors">
-            <Phone className="w-5 h-5 text-[#aebac1]" />
-          </button>
-          <button className="p-2 rounded-full hover:bg-[#2a3942] transition-colors">
-            <Search className="w-5 h-5 text-[#aebac1]" />
-          </button>
-          <button className="p-2 rounded-full hover:bg-[#2a3942] transition-colors">
-            <MoreVertical className="w-5 h-5 text-[#aebac1]" />
-          </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-[#2a3942] rounded-lg px-3 py-1.5">
+            <Search className="w-4 h-4 text-[#aebac1]" />
+            <input
+              type="text"
+              value={searchInChat}
+              onChange={(e) => setSearchInChat(e.target.value)}
+              placeholder="Search messages"
+              className="w-40 bg-transparent text-sm text-[#e9edef] placeholder-[#8696a0] outline-none"
+            />
+          </div>
         </div>
       </div>
 
@@ -629,9 +637,11 @@ export function ChatWindow() {
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23182229' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       >
-        {messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-[#8696a0] text-sm">No messages yet</p>
+            <p className="text-[#8696a0] text-sm">
+              {searchInChat.trim() ? "No messages match your search" : "No messages yet"}
+            </p>
           </div>
         ) : (
           <>

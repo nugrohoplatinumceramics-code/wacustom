@@ -12,23 +12,29 @@ export type MessageType =
   | "revoked";
 
 export interface GowaWebhookPayload {
-  from: string;
-  message_id: string;
-  push_name: string;
-  is_from_me: boolean;
-  type: MessageType;
+  from?: string;
+  chat_id?: string;
+  id?: string;
+  message_id?: string;
+  from_name?: string;
+  push_name?: string;
+  is_from_me?: boolean;
+  type?: MessageType;
+  body?: string;
   text?: string;
-  image?: GowaMedia;
-  video?: GowaMedia;
-  audio?: GowaMedia;
-  document?: GowaMedia;
-  sticker?: GowaMedia;
+  image?: GowaMedia | string;
+  video?: GowaMedia | string;
+  audio?: GowaMedia | string;
+  document?: GowaMedia | string;
+  sticker?: GowaMedia | string;
   location?: GowaLocation;
   contact?: GowaContact;
-  reaction?: GowaReaction;
+  reaction?: GowaReaction | string;
+  reacted_message_id?: string;
+  revoked_message_id?: string;
   reply_message?: GowaReplyMessage;
-  timestamp: string;
-  is_group: boolean;
+  timestamp?: string;
+  is_group?: boolean;
   group_id?: string;
   group_name?: string;
   sender?: string;
@@ -37,8 +43,10 @@ export interface GowaWebhookPayload {
 
 export interface GowaMedia {
   url?: string;
+  path?: string;
   caption?: string;
   mime_type?: string;
+  filename?: string;
   file_name?: string;
   file_size?: number;
   data?: string; // base64
@@ -106,10 +114,13 @@ export interface ReplyInfo {
 
 export interface ImageAnnotation {
   id: string;
+  kind?: "rect" | "freehand";
   x: number; // percentage
   y: number; // percentage
   width: number; // percentage
   height: number; // percentage
+  points?: { x: number; y: number }[]; // percentage points for freehand path
+  strokeWidth?: number; // percentage of image width
   color: string;
   label?: string;
   createdAt: Date;

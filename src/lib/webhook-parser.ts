@@ -1,72 +1,85 @@
 import type { GowaWebhookPayload, Message, Chat } from "@/types/whatsapp";
 
-export function parseWebhookToMessage(payload: GowaWebhookPayload): Message {
-  const chatId = payload.is_group
-    ? payload.group_id || payload.from
-    : payload.is_from_me
-      ? payload.from
-      : payload.from;
+interface ParseWebhookOptions {
+  event?: string;
+}
 
-  const senderPhone = payload.is_group
-    ? payload.sender || payload.from
-    : payload.from;
+function toMediaContent(media?: GowaWebhookPayload["image"]) {
+  if (!media) return undefined;
+  if (typeof media === "string") return { url: media };
+  return {
+    url: media.url || media.path,
+    caption: media.caption,
+    mimeType: media.mime_type,
+    fileName: media.file_name || media.filename,
+    fileSize: media.file_size,
+    data: media.data,
+  };
+}
 
-  const senderName = payload.is_group
-    ? payload.sender_name || payload.push_name || senderPhone
-    : payload.push_name || payload.from;
+function inferIsGroup(payload: GowaWebhookPayload): boolean {
+  if (typeof payload.is_group === "boolean") return payload.is_group;
+  if (payload.group_id) return true;
+  return (payload.chat_id || payload.from || "").endsWith("@g.us");
+}
+
+function inferMessageType(payload: GowaWebhookPayload, event?: string): Message["type"] {
+  if (event === "message.reaction") return "reaction";
+  if (event === "message.revoked") return "revoked";
+  if (payload.type) return payload.type;
+  if (payload.reaction || payload.reacted_message_id) return "reaction";
+  if (payload.revoked_message_id) return "revoked";
+  if (payload.image) return "image";
+  if (payload.video) return "video";
+  if (payload.audio) return "audio";
+  if (payload.document) return "document";
+  if (payload.sticker) return "sticker";
+  if (payload.location) return "location";
+  if (payload.contact) return "contact";
+  return "text";
+}
+
+export function parseWebhookToMessage(
+  payload: GowaWebhookPayload,
+  options: ParseWebhookOptions = {}
+): Message {
+  const isGroup = inferIsGroup(payload);
+  const chatId = payload.chat_id || (isGroup ? payload.group_id || payload.from : payload.from) || "unknown@chat";
+  const senderPhone = isGroup ? payload.sender || payload.from || chatId : payload.from || chatId;
+  const senderName = isGroup
+    ? payload.sender_name || payload.from_name || payload.push_name || senderPhone
+    : payload.from_name || payload.push_name || payload.from || senderPhone;
+  const messageType = inferMessageType(payload, options.event);
+  const messageId = payload.message_id || payload.id || `${chatId}-${payload.timestamp || Date.now()}`;
+  const rawReaction = payload.reaction;
 
   const message: Message = {
-    id: payload.message_id,
+    id: messageId,
     chatId,
-    fromMe: payload.is_from_me,
+    fromMe: Boolean(payload.is_from_me),
     senderName,
     senderPhone,
-    type: payload.type,
-    timestamp: new Date(payload.timestamp),
+    type: messageType,
+    timestamp: payload.timestamp ? new Date(payload.timestamp) : new Date(),
     status: "delivered",
   };
 
   // Parse text
-  if (payload.text) {
-    message.text = payload.text;
+  if (payload.text || payload.body) {
+    message.text = payload.text || payload.body;
   }
 
   // Parse media
   if (payload.image) {
-    message.media = {
-      url: payload.image.url,
-      caption: payload.image.caption,
-      mimeType: payload.image.mime_type,
-      data: payload.image.data,
-    };
+    message.media = toMediaContent(payload.image);
   } else if (payload.video) {
-    message.media = {
-      url: payload.video.url,
-      caption: payload.video.caption,
-      mimeType: payload.video.mime_type,
-      data: payload.video.data,
-    };
+    message.media = toMediaContent(payload.video);
   } else if (payload.audio) {
-    message.media = {
-      url: payload.audio.url,
-      mimeType: payload.audio.mime_type,
-      data: payload.audio.data,
-    };
+    message.media = toMediaContent(payload.audio);
   } else if (payload.document) {
-    message.media = {
-      url: payload.document.url,
-      caption: payload.document.caption,
-      mimeType: payload.document.mime_type,
-      fileName: payload.document.file_name,
-      fileSize: payload.document.file_size,
-      data: payload.document.data,
-    };
+    message.media = toMediaContent(payload.document);
   } else if (payload.sticker) {
-    message.media = {
-      url: payload.sticker.url,
-      mimeType: payload.sticker.mime_type,
-      data: payload.sticker.data,
-    };
+    message.media = toMediaContent(payload.sticker);
   }
 
   // Parse location
@@ -80,8 +93,15 @@ export function parseWebhookToMessage(payload: GowaWebhookPayload): Message {
   }
 
   // Parse reaction
-  if (payload.reaction) {
-    message.reaction = payload.reaction;
+  if (rawReaction) {
+    if (typeof rawReaction === "string") {
+      message.reaction = {
+        message_id: payload.reacted_message_id || "",
+        emoji: rawReaction,
+      };
+    } else {
+      message.reaction = rawReaction;
+    }
   }
 
   // Parse reply
@@ -101,14 +121,15 @@ export function parseWebhookToChat(
   message: Message
 ): Chat {
   const chatId = message.chatId;
+  const isGroup = inferIsGroup(payload);
 
   return {
     id: chatId,
-    name: payload.is_group
+    name: isGroup
       ? payload.group_name || chatId
-      : payload.push_name || payload.from,
-    phone: payload.is_group ? payload.group_id || payload.from : payload.from,
-    isGroup: payload.is_group,
+      : payload.from_name || payload.push_name || payload.from || chatId,
+    phone: isGroup ? payload.group_id || payload.chat_id || payload.from || chatId : payload.chat_id || payload.from || chatId,
+    isGroup,
     groupId: payload.group_id,
     lastMessage: message,
     unreadCount: payload.is_from_me ? 0 : 1,

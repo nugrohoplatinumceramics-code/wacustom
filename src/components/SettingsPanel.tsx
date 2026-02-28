@@ -18,7 +18,20 @@ interface QrLoginResult {
   qr_link: string;
 }
 
-export function SettingsPanel() {
+function isOnlineWaState(state: string | null | undefined): boolean {
+  const normalized = (state || "").toLowerCase();
+  return normalized === "connected" || normalized === "logged_in";
+}
+
+interface SettingsPanelProps {
+  triggerVariant?: "icon" | "menu-item";
+  onTriggerClick?: () => void;
+}
+
+export function SettingsPanel({
+  triggerVariant = "icon",
+  onTriggerClick,
+}: SettingsPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const {
     gowaBaseUrl,
@@ -28,6 +41,7 @@ export function SettingsPanel() {
     exportBackup,
     importBackup,
     clearAllData,
+    setIsWhatsAppConnected,
   } = useWhatsAppStore();
   const [urlInput, setUrlInput] = useState(gowaBaseUrl);
   const [deviceIdInput, setDeviceIdInput] = useState(gowaDeviceId);
@@ -73,7 +87,7 @@ export function SettingsPanel() {
     } finally {
       setLoadingDevices(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlInput]);
 
   const checkDeviceStatus = useCallback(async (deviceId: string) => {
@@ -82,13 +96,16 @@ export function SettingsPanel() {
       const res = await fetch(proxyUrl(`/devices/${deviceId}`, deviceId));
       const data = await res.json();
       if (data.results) {
-        setDeviceStatus(data.results.state || "unknown");
+        const state = data.results.state || "unknown";
+        setDeviceStatus(state);
+        setIsWhatsAppConnected(isOnlineWaState(state));
       }
     } catch {
       setDeviceStatus("error");
+      setIsWhatsAppConnected(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlInput]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlInput, setIsWhatsAppConnected]);
 
   useEffect(() => {
     if (isOpen) {
@@ -99,16 +116,17 @@ export function SettingsPanel() {
     }
   }, [isOpen, fetchDevices, checkDeviceStatus, deviceIdInput]);
 
-  // Poll QR code status
+  // Poll QR code status — hanya berjalan saat QR sedang ditampilkan
   useEffect(() => {
     if (!qrData) return;
     const interval = setInterval(async () => {
       try {
         const res = await fetch(proxyUrl(`/devices/${deviceIdInput}`, deviceIdInput));
         const data = await res.json();
-        if (data.results?.state === "connected") {
+        if (isOnlineWaState(data.results?.state)) {
           setQrData(null);
-          setDeviceStatus("connected");
+          setDeviceStatus(data.results?.state || "connected");
+          setIsWhatsAppConnected(true);
           clearInterval(interval);
           fetchDevices();
         }
@@ -117,8 +135,8 @@ export function SettingsPanel() {
       }
     }, 3000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qrData, deviceIdInput]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrData, deviceIdInput, setIsWhatsAppConnected]);
 
   const handleGetQR = async () => {
     setQrLoading(true);
@@ -217,7 +235,7 @@ export function SettingsPanel() {
       try {
         const content = e.target?.result as string;
         const backup: BackupData = JSON.parse(content);
-        
+
         // Validate backup structure
         if (!backup.version || !backup.chats || !backup.messages) {
           throw new Error("Invalid backup file format");
@@ -268,14 +286,24 @@ export function SettingsPanel() {
     <>
       <button
         onClick={() => {
+          onTriggerClick?.();
           setUrlInput(gowaBaseUrl);
           setDeviceIdInput(gowaDeviceId);
           setIsOpen(true);
         }}
-        className="p-2 rounded-full hover:bg-[#2a3942] transition-colors"
+        className={
+          triggerVariant === "menu-item"
+            ? "w-full text-left px-4 py-2 text-sm text-[#e9edef] hover:bg-[#2a3942] flex items-center gap-2"
+            : "p-2 rounded-full hover:bg-[#2a3942] transition-colors"
+        }
         title="Settings"
       >
-        <Settings className="w-5 h-5 text-[#aebac1]" />
+        <Settings
+          className={
+            triggerVariant === "menu-item" ? "w-4 h-4 text-[#aebac1]" : "w-5 h-5 text-[#aebac1]"
+          }
+        />
+        {triggerVariant === "menu-item" && <span>Settings</span>}
       </button>
 
       {isOpen && (
@@ -363,18 +391,16 @@ export function SettingsPanel() {
                       <button
                         key={device.id}
                         onClick={() => setDeviceIdInput(device.id)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                          deviceIdInput === device.id
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${deviceIdInput === device.id
                             ? "bg-[#00a884]/20 border border-[#00a884]/40"
                             : "bg-[#2a3942] hover:bg-[#3b4a54]"
-                        }`}
+                          }`}
                       >
                         <div
-                          className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                            device.state === "connected"
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${device.state === "connected"
                               ? "bg-[#00a884]"
                               : "bg-[#8696a0]"
-                          }`}
+                            }`}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-[#e9edef] truncate">

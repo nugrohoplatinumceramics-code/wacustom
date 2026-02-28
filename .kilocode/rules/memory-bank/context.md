@@ -111,3 +111,11 @@ A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOW
 | 2026-02-27 | Fixed confusing status label - changed "Connected" to "Live" to indicate SSE status, not WhatsApp connection |
 | 2026-02-27 | Added resizable sidebar with draggable divider (280px - 600px range), width persists in localStorage |
 | 2026-02-27 | Added message context menu with delete, forward, and reply options; messages can be forwarded to other chats |
+| 2026-02-28 | Fixed webhook parser compatibility for GOWA v8 payload (`id/body/from_name/chat_id`) while preserving legacy format support |
+| 2026-02-28 | Added initial history sync from GOWA (`/chats` + `/chat/{jid}/messages`) on app startup when local chats are empty |
+| 2026-02-28 | Added browser notifications for incoming messages and fixed left-sidebar unread badge consistency |
+| 2026-02-28 | Removed call/video header actions, added in-chat message search, and suppressed duplicate outgoing media placeholder text (e.g. "Image") |
+| 2026-02-28 | Persisted outgoing image preview across refresh using data URL and enabled emoji picker in message input |
+| 2026-02-28 | Added pre-send image editor in composer with crop rectangle and marker rectangle modes, applying edits into the uploaded image file |
+| 2026-02-28 | Implemented New Message dialog with GOWA contact picker and manual phone number input to start chat |
+| 2026-02-28 | Added clipboard image paste support (Ctrl+V) in message composer, converting pasted image to pending attachment preview |

@@ -27,7 +27,7 @@ interface GowaChatMessageItem {
   chat_jid: string;
   sender_jid?: string;
   content?: string;
-  timestamp?: string;
+  timestamp?: string | number;
   is_from_me?: boolean;
   media_type?: string;
   filename?: string;
@@ -64,8 +64,19 @@ function placeholderTypeFromText(value?: string): Exclude<Message["type"], "text
   return null;
 }
 
-function toDate(value?: string): Date {
-  if (!value) return new Date();
+function toDate(value?: string | number): Date {
+  if (value === undefined || value === null || value === "") return new Date();
+  if (typeof value === "number") {
+    const ms = value < 1e12 ? value * 1000 : value;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }
+  const numeric = Number(value);
+  if (!Number.isNaN(numeric) && /^\d+(\.\d+)?$/.test(value.trim())) {
+    const ms = numeric < 1e12 ? numeric * 1000 : numeric;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? new Date() : d;
 }
@@ -83,6 +94,15 @@ function isValidPrivateJid(jid: string): boolean {
 function isOnlineWaState(state: string | null | undefined): boolean {
   const normalized = (state || "").toLowerCase();
   return normalized === "connected" || normalized === "logged_in";
+}
+
+function hasRenderableMedia(message: Message | undefined): boolean {
+  if (!message?.media) return false;
+  return Boolean(
+    message.media.localUrl ||
+      message.media.url ||
+      message.media.data
+  );
 }
 
 export function useSSE() {
@@ -351,6 +371,45 @@ export function useSSE() {
                   return message;
                 })
                 .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+              const existingById = new Map(existingMessages.map((m) => [m.id, m]));
+              const historyIdSet = new Set(historyMessages.map((m) => m.id));
+
+              // Keep richer local media data (data URL/base64/annotation) when history only has placeholders.
+              historyMessages = historyMessages.map((m) => {
+                const existing = existingById.get(m.id);
+                if (!existing) return m;
+
+                const merged: Message = {
+                  ...m,
+                  annotations: existing.annotations || m.annotations,
+                };
+
+                if (hasRenderableMedia(existing) && !hasRenderableMedia(m)) {
+                  merged.media = existing.media;
+                  if (m.type === "text" && existing.type !== "text") {
+                    merged.type = existing.type;
+                    merged.text = existing.text;
+                  }
+                }
+
+                return merged;
+              });
+
+              // Preserve optimistic/local-only outgoing media not returned by history endpoint yet.
+              const localOnlyMedia = existingMessages.filter(
+                (m) =>
+                  !historyIdSet.has(m.id) &&
+                  m.fromMe &&
+                  m.type !== "text" &&
+                  hasRenderableMedia(m)
+              );
+
+              if (localOnlyMedia.length > 0) {
+                historyMessages = [...historyMessages, ...localOnlyMedia].sort(
+                  (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+                );
+              }
             }
           } catch {
             // Skip this chat if message fetch fails.

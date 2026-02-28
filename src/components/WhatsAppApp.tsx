@@ -83,6 +83,25 @@ export function WhatsAppApp() {
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // Prevent browser from opening dropped files in a new tab/window.
+  useEffect(() => {
+    const preventFileDropNavigation = (e: DragEvent) => {
+      const hasFiles = Array.from(e.dataTransfer?.types || []).includes("Files");
+      if (!hasFiles) return;
+      e.preventDefault();
+      if (e.type === "dragover" && e.dataTransfer) {
+        e.dataTransfer.dropEffect = "copy";
+      }
+    };
+
+    window.addEventListener("dragover", preventFileDropNavigation);
+    window.addEventListener("drop", preventFileDropNavigation);
+    return () => {
+      window.removeEventListener("dragover", preventFileDropNavigation);
+      window.removeEventListener("drop", preventFileDropNavigation);
+    };
+  }, []);
+
   if (!isMounted) {
     return (
       <div className="flex h-screen w-screen overflow-hidden bg-[#111b21] relative">

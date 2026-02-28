@@ -53,11 +53,53 @@ interface DrawPath {
 
 interface ImageEditorProps {
   src: string;
+  caption: string;
+  onCaptionChange: (value: string) => void;
   onApply: (nextFile: File, nextPreview: string) => void;
   onClose: () => void;
 }
 
-function ImageEditorModal({ src, onApply, onClose }: ImageEditorProps) {
+interface VideoPreviewModalProps {
+  src: string;
+  caption: string;
+  onCaptionChange: (value: string) => void;
+  onClose: () => void;
+}
+
+function VideoPreviewModal({ src, caption, onCaptionChange, onClose }: VideoPreviewModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+      <div className="w-full max-w-3xl bg-[#111b21] border border-[#2a3942] rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-[#202c33]">
+          <p className="text-sm text-[#e9edef]">Video Preview</p>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-[#2a3942]">
+            <X className="w-4 h-4 text-[#aebac1]" />
+          </button>
+        </div>
+        <div className="p-4">
+          <video src={src} controls className="w-full max-h-[70vh] bg-black rounded-lg" />
+        </div>
+        <div className="px-4 pb-4">
+          <input
+            type="text"
+            placeholder="Add a caption..."
+            value={caption}
+            onChange={(e) => onCaptionChange(e.target.value)}
+            className="w-full bg-[#2a3942] text-sm text-[#e9edef] px-3 py-2 rounded-lg outline-none placeholder-[#8696a0]"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImageEditorModal({
+  src,
+  caption,
+  onCaptionChange,
+  onApply,
+  onClose,
+}: ImageEditorProps) {
   const [mode, setMode] = useState<"crop" | "spidol">("crop");
   const [cropRect, setCropRect] = useState<Rect | null>(null);
   const [spidolPaths, setSpidolPaths] = useState<DrawPath[]>([]);
@@ -408,6 +450,13 @@ function ImageEditorModal({ src, onApply, onClose }: ImageEditorProps) {
               />
             )}
           </div>
+          <input
+            type="text"
+            placeholder="Add a caption..."
+            value={caption}
+            onChange={(e) => onCaptionChange(e.target.value)}
+            className="mt-3 w-full bg-[#2a3942] text-sm text-[#e9edef] px-3 py-2 rounded-lg outline-none placeholder-[#8696a0]"
+          />
         </div>
       </div>
     </div>
@@ -420,6 +469,8 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showImageEditor, setShowImageEditor] = useState(false);
+  const [showVideoPreview, setShowVideoPreview] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [pendingAttachment, setPendingAttachment] =
     useState<PendingAttachment | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -427,6 +478,20 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
   const { replyingTo, setReplyingTo, addMessage, gowaBaseUrl, gowaDeviceId } =
     useWhatsAppStore();
   const quickEmojis = ["😀", "😂", "😍", "👍", "🙏", "🔥", "🎉", "❤️", "😊", "😭", "😎", "🤝"];
+
+  const hasFilesInDragEvent = (e: DragEvent | React.DragEvent) =>
+    Array.from(e.dataTransfer?.types || []).includes("Files");
+
+  const clearPendingAttachment = useCallback(() => {
+    setPendingAttachment((prev) => {
+      if (prev?.type === "video" && prev.preview?.startsWith("blob:")) {
+        URL.revokeObjectURL(prev.preview);
+      }
+      return null;
+    });
+    setShowImageEditor(false);
+    setShowVideoPreview(false);
+  }, []);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
@@ -444,37 +509,32 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
   };
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items || items.length === 0) return;
+    const clipboard = e.clipboardData;
+    if (!clipboard) return;
 
-    const imageItem = Array.from(items).find((item) =>
-      item.type.startsWith("image/")
+    const fileFromFiles = Array.from(clipboard.files || []).find(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
     );
-    if (!imageItem) return;
-
-    const file = imageItem.getAsFile();
+    const fileFromItems = Array.from(clipboard.items || [])
+      .find(
+        (item) =>
+          item.kind === "file" &&
+          (item.type.startsWith("image/") || item.type.startsWith("video/"))
+      )
+      ?.getAsFile();
+    const file = fileFromFiles || fileFromItems || null;
     if (!file) return;
 
     e.preventDefault();
     setShowAttachMenu(false);
     setShowEmojiPicker(false);
 
-    const preview = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("Failed to read pasted image"));
-      reader.readAsDataURL(file);
-    }).catch(() => "");
-
-    setPendingAttachment({
-      file: new File([file], `pasted-${Date.now()}.png`, {
-        type: file.type || "image/png",
+    await handleIncomingFile(
+      new File([file], `pasted-${Date.now()}${file.type.startsWith("video/") ? ".mp4" : ".png"}`, {
+        type: file.type || (file.type.startsWith("video/") ? "video/mp4" : "image/png"),
       }),
-      type: "image",
-      preview,
-      caption: "",
-    });
-    setShowImageEditor(true);
+      { autoOpenPreview: true }
+    );
   };
 
   const createOptimisticMessage = (
@@ -541,9 +601,14 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
         });
         addMessage(optimistic);
 
-        await fetch("/api/send/media", { method: "POST", body: formData });
+        const mediaRes = await fetch("/api/send/media", { method: "POST", body: formData });
+        if (!mediaRes.ok) {
+          const errBody = await mediaRes.json().catch(() => ({}));
+          throw new Error(errBody?.message || "Failed to send media");
+        }
         setPendingAttachment(null);
         setShowImageEditor(false);
+        setShowVideoPreview(false);
       } else {
         // Send text
         const optimistic = createOptimisticMessage("text", {
@@ -586,11 +651,32 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, pendingAttachment, sending, phone, replyingTo, gowaBaseUrl, gowaDeviceId]);
 
+  useEffect(() => {
+    if (!showImageEditor || !pendingAttachment) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === "Enter" &&
+        !e.shiftKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey
+      ) {
+        e.preventDefault();
+        setShowImageEditor(false);
+        void handleSend();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showImageEditor, pendingAttachment, handleSend]);
+
   const handleFileSelect = (type: AttachmentType) => {
     setShowAttachMenu(false);
     if (fileInputRef.current) {
       const acceptMap: Record<AttachmentType, string> = {
-        image: "image/*",
+        image: "image/*,video/*",
         document: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar",
         video: "video/*",
         audio: "audio/*",
@@ -605,26 +691,127 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const type = (e.target.dataset.type as AttachmentType) || "document";
-    let preview: string | undefined;
-
-    if (type === "image") {
-      // Persist image preview across page reload by storing data URL (not blob URL).
-      preview = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("Failed to read image"));
-        reader.readAsDataURL(file);
-      }).catch(() => "");
-    }
-
-    setPendingAttachment({ file, type, preview, caption: "" });
-    setShowImageEditor(type === "image" && Boolean(preview));
+    const selectedType = (e.target.dataset.type as AttachmentType) || "document";
+    await handleIncomingFile(file, {
+      forcedType: selectedType,
+      autoOpenPreview: true,
+    });
     e.target.value = "";
   };
 
+  const handleIncomingFile = useCallback(
+    async (
+      file: File,
+      options?: {
+        forcedType?: AttachmentType;
+        autoOpenPreview?: boolean;
+      }
+    ) => {
+      const baseType = options?.forcedType || "document";
+      const type: AttachmentType =
+        baseType === "image" && file.type.startsWith("video/")
+          ? "video"
+          : baseType === "image" && file.type.startsWith("image/")
+            ? "image"
+            : file.type.startsWith("image/")
+              ? "image"
+              : file.type.startsWith("video/")
+                ? "video"
+                : file.type.startsWith("audio/")
+                  ? "audio"
+                  : baseType;
+
+      let preview: string | undefined;
+      if (type === "image") {
+        preview = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Failed to read image"));
+          reader.readAsDataURL(file);
+        }).catch(() => "");
+      } else if (type === "video") {
+        preview = URL.createObjectURL(file);
+      }
+
+      setPendingAttachment((prev) => {
+        if (prev?.type === "video" && prev.preview?.startsWith("blob:")) {
+          URL.revokeObjectURL(prev.preview);
+        }
+        return { file, type, preview, caption: "" };
+      });
+      setShowAttachMenu(false);
+      setShowEmojiPicker(false);
+      if (options?.autoOpenPreview) {
+        setShowImageEditor(type === "image" && Boolean(preview));
+        setShowVideoPreview(type === "video" && Boolean(preview));
+      }
+    },
+    []
+  );
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setIsDragOver(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length === 0) return;
+    const file = files[0];
+    await handleIncomingFile(file, { autoOpenPreview: true });
+  };
+
+  useEffect(() => {
+    const onWindowDragOver = (e: DragEvent) => {
+      if (!hasFilesInDragEvent(e)) return;
+      e.preventDefault();
+      setIsDragOver(true);
+    };
+
+    const onWindowDrop = (e: DragEvent) => {
+      if (!hasFilesInDragEvent(e)) return;
+      e.preventDefault();
+      setIsDragOver(false);
+      const files = Array.from(e.dataTransfer?.files || []);
+      const file = files[0];
+      if (!file) return;
+      void handleIncomingFile(file, { autoOpenPreview: true });
+    };
+
+    const onWindowDragEnd = () => setIsDragOver(false);
+
+    window.addEventListener("dragover", onWindowDragOver);
+    window.addEventListener("drop", onWindowDrop);
+    window.addEventListener("dragend", onWindowDragEnd);
+    return () => {
+      window.removeEventListener("dragover", onWindowDragOver);
+      window.removeEventListener("drop", onWindowDrop);
+      window.removeEventListener("dragend", onWindowDragEnd);
+    };
+  }, [handleIncomingFile]);
+
   return (
-    <div className="bg-[#202c33] border-t border-[#2a3942]">
+    <div
+      className={`bg-[#202c33] border-t ${isDragOver ? "border-[#00a884]" : "border-[#2a3942]"}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <div className="px-4 py-2 text-xs text-[#00a884] bg-[#0f2f2a] border-b border-[#1c5b4f]">
+          Drop file here to attach
+        </div>
+      )}
       {/* Reply preview */}
       {replyingTo && (
         <div className="flex items-center gap-3 px-4 py-2 bg-[#1f2c34] border-b border-[#2a3942]">
@@ -649,7 +836,13 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
       {/* Attachment preview */}
       {pendingAttachment && (
         <div className="flex items-center gap-3 px-4 py-3 bg-[#1f2c34] border-b border-[#2a3942]">
-          {pendingAttachment.preview ? (
+          {pendingAttachment.type === "video" && pendingAttachment.preview ? (
+            <video
+              src={pendingAttachment.preview}
+              className="w-20 h-16 object-cover rounded-lg bg-black"
+              controls
+            />
+          ) : pendingAttachment.preview ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={pendingAttachment.preview}
@@ -668,17 +861,6 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
             <p className="text-xs text-[#8696a0]">
               {formatFileSize(pendingAttachment.file.size)}
             </p>
-            <input
-              type="text"
-              placeholder="Add a caption..."
-              value={pendingAttachment.caption}
-              onChange={(e) =>
-                setPendingAttachment((prev) =>
-                  prev ? { ...prev, caption: e.target.value } : null
-                )
-              }
-              className="mt-1 w-full bg-[#2a3942] text-sm text-[#e9edef] px-2 py-1 rounded outline-none placeholder-[#8696a0]"
-            />
             {pendingAttachment.type === "image" && pendingAttachment.preview && (
               <button
                 onClick={() => setShowImageEditor(true)}
@@ -687,12 +869,17 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
                 Edit (Crop/Spidol)
               </button>
             )}
+            {pendingAttachment.type === "video" && pendingAttachment.preview && (
+              <button
+                onClick={() => setShowVideoPreview(true)}
+                className="mt-2 px-2 py-1 text-xs rounded bg-[#2a3942] text-[#e9edef] hover:bg-[#3b4a54]"
+              >
+                Preview Video
+              </button>
+            )}
           </div>
           <button
-            onClick={() => {
-              setPendingAttachment(null);
-              setShowImageEditor(false);
-            }}
+            onClick={clearPendingAttachment}
             className="p-1 rounded-full hover:bg-[#2a3942]"
           >
             <X className="w-4 h-4 text-[#8696a0]" />
@@ -703,6 +890,12 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
       {showImageEditor && pendingAttachment?.type === "image" && pendingAttachment.preview && (
         <ImageEditorModal
           src={pendingAttachment.preview}
+          caption={pendingAttachment.caption}
+          onCaptionChange={(value) =>
+            setPendingAttachment((prev) =>
+              prev ? { ...prev, caption: value } : prev
+            )
+          }
           onApply={(nextFile, nextPreview) => {
             setPendingAttachment((prev) =>
               prev
@@ -714,7 +907,20 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
                 : prev
             );
           }}
-          onClose={() => setShowImageEditor(false)}
+          onClose={clearPendingAttachment}
+        />
+      )}
+
+      {showVideoPreview && pendingAttachment?.type === "video" && pendingAttachment.preview && (
+        <VideoPreviewModal
+          src={pendingAttachment.preview}
+          caption={pendingAttachment.caption}
+          onCaptionChange={(value) =>
+            setPendingAttachment((prev) =>
+              prev ? { ...prev, caption: value } : prev
+            )
+          }
+          onClose={clearPendingAttachment}
         />
       )}
 
@@ -774,15 +980,6 @@ export function MessageInput({ chatId, phone }: MessageInputProps) {
                   <FileText className="w-4 h-4 text-white" />
                 </div>
                 Document
-              </button>
-              <button
-                onClick={() => handleFileSelect("video")}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#2a3942] transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center">
-                  <Video className="w-4 h-4 text-white" />
-                </div>
-                Video
               </button>
               <button
                 onClick={() => handleFileSelect("audio")}

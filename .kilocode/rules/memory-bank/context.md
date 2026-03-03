@@ -119,3 +119,4 @@ A full-featured WhatsApp Web clone built on Next.js 16 that integrates with [GOW
 | 2026-02-28 | Added pre-send image editor in composer with crop rectangle and marker rectangle modes, applying edits into the uploaded image file |
 | 2026-02-28 | Implemented New Message dialog with GOWA contact picker and manual phone number input to start chat |
 | 2026-02-28 | Added clipboard image paste support (Ctrl+V) in message composer, converting pasted image to pending attachment preview |
+| 2026-03-03 | Fixed `/api/gowa` proxy JSON parsing crash by handling non-JSON upstream responses (e.g. HTML error pages) and forwarding text payloads with original status/content-type |

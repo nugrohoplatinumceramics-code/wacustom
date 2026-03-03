@@ -63,8 +63,18 @@ async function proxyRequest(request: NextRequest, method: string) {
       });
     }
 
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
+    if (responseContentType.includes("application/json")) {
+      const data = await response.json();
+      return NextResponse.json(data, { status: response.status });
+    }
+
+    const text = await response.text();
+    return new NextResponse(text, {
+      status: response.status,
+      headers: {
+        "Content-Type": responseContentType || "text/plain; charset=utf-8",
+      },
+    });
   } catch (error) {
     console.error("GOWA proxy error:", error);
     return NextResponse.json(
